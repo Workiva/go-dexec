@@ -98,6 +98,15 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	return nil
 }
 
+// createContainer creates a running container on the containerd host but does not start it. Containerd is different
+// from Docker in that the client is a fat client. When making calls on the socket, some actions happen on the running
+// container, while others happen on the host. By default, if you create a container using the socket, there is NO
+// networking configured. It is _extremely_ complicated to get it working, _especially_ in a configuration where you
+// are using a mounted socket and trying to create containers and tasks on the host. As a workaround for some of the
+// complexity, we are using the nerdctl binary to create the container itself. When nerdctl creates the container, it
+// adds hooks to the container's spec that are executed by the host to set up the networking and any other required
+// infrastructure. Once the container is successfully created by nerdctl, we then use the socket to create tasks, run
+// them, and wait for completion
 func (t *createTask) createContainer(c Containerd) (containerd.Container, error) {
 	nerdctlArgs := t.buildCreateContainerArgs(c)
 	cmd := exec.Command(nerdctlBinary, nerdctlArgs...)
