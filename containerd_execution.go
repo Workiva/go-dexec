@@ -90,8 +90,6 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 
 	if err != nil {
 		return fmt.Errorf("error creating container: %w", err)
-	} else {
-		logrus.Infof("successfully created container %s", container.ID())
 	}
 	t.container = container
 
