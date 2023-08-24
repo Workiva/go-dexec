@@ -20,8 +20,8 @@ type container struct {
 	containerd.Container
 }
 
-func (c *container) Task(ctx context.Context, attach cio.Attach) (containerd.Task, error) {
-	args := c.Called(ctx, attach)
+func (c *container) NewTask(ctx context.Context, creator cio.Creator, opts ...containerd.NewTaskOpts) (containerd.Task, error) {
+	args := c.Called(ctx, creator)
 	err := args.Error(1)
 	if taskIfc, ok := args.Get(0).(containerd.Task); ok {
 		return taskIfc, err
@@ -104,7 +104,7 @@ func Test_createTask_run(t *testing.T) {
 	mockTask := new(task)
 	spec := &oci.Spec{Process: &specs.Process{}}
 	mockContainer.
-		On("Task", mock.Anything, mock.Anything).Return(mockTask, nil).
+		On("NewTask", mock.Anything, mock.Anything).Return(mockTask, nil).
 		On("ID").Return("unit-test").
 		On("Spec", mock.Anything).Return(spec, nil)
 
