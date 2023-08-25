@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/sirupsen/logrus"
 	"time"
@@ -54,7 +55,7 @@ func getContainerdStats(c *containerd.Client) (Stats, error) {
 				stats.Errors += 1
 				logrus.Warnf("stats: error getting task status: %v", err)
 			}
-		} else {
+		} else if !errdefs.IsNotFound(err) {
 			logrus.Warnf("stats: error geting task from container: %v", err)
 			stats.Errors += 1
 		}
