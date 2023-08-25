@@ -1,6 +1,8 @@
 package dexec
 
-import "github.com/containerd/containerd"
+import (
+	"github.com/containerd/containerd"
+)
 
 type Stats struct {
 	Running          int
