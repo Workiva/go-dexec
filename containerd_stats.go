@@ -20,8 +20,11 @@ func getContainerdStats(c *containerd.Client) (Stats, error) {
 		return Stats{}, fmt.Errorf("error getting stats: %w", err)
 	}
 
-	stats := Stats{}
+	return processContainers(ctx, containers), nil
+}
 
+func processContainers(ctx context.Context, containers []containerd.Container) Stats {
+	stats := Stats{}
 	for _, container := range containers {
 		if labels, err := container.Labels(ctx); err == nil {
 			if deadline, ok := labels[deadlineLabel]; ok {
@@ -60,5 +63,5 @@ func getContainerdStats(c *containerd.Client) (Stats, error) {
 			stats.Errors += 1
 		}
 	}
-	return stats, nil
+	return stats
 }
