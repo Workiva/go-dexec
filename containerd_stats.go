@@ -24,7 +24,7 @@ func getContainerdStats(c *containerd.Client) (Stats, error) {
 	for _, container := range containers {
 		if labels, err := container.Labels(ctx); err == nil {
 			if deadline, ok := labels[deadlineLabel]; ok {
-				if deadlineTime, err := time.Parse(deadline, time.RFC3339); err == nil && time.Now().After(deadlineTime) {
+				if deadlineTime, err := time.Parse(time.RFC3339, deadline); err == nil && time.Now().After(deadlineTime) {
 					stats.DeadlineExceeded += 1
 				} else if err != nil {
 					logrus.Warnf("stats: error parsing time: %v", err)
