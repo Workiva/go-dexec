@@ -48,24 +48,26 @@ func ByCreatingTask(opts CreateTaskOptions, logger *logrus.Entry) (Execution[Con
 }
 
 type createTask struct {
-	opts      CreateTaskOptions
-	ctx       context.Context
-	doneFunc  func(ctx context.Context) error
-	image     containerd.Image
-	container containerd.Container
-	task      containerd.Task
-	cmd       []string
-	process   containerd.Process
-	exitChan  <-chan containerd.ExitStatus
-	tmpDir    string
-	logger    *logrus.Entry
-	labels    map[string]string
+	opts       CreateTaskOptions
+	ctx        context.Context
+	doneFunc   func(ctx context.Context) error
+	image      containerd.Image
+	container  containerd.Container
+	task       containerd.Task
+	cmd        []string
+	process    containerd.Process
+	exitChan   <-chan containerd.ExitStatus
+	tmpDir     string
+	logger     *logrus.Entry
+	labels     map[string]string
+	expiration time.Duration
 }
 
 func (t *createTask) create(c Containerd, cmd []string) error {
 	t.cmd = cmd
 	// add buffer to the command timeout
 	expiration := t.opts.CommandTimeout + timeoutBuffer
+	t.expiration = expiration
 	// the default containerd settings makes things eligible for garbage collection after 24 hours
 	// since we are spinning up hundreds of thousands of tasks per day, let's set a shorter expiration
 	// so we can try and be good netizens
@@ -75,14 +77,8 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 		return fmt.Errorf("error creating containerd context: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, expiration)
-
 	t.ctx = ctx
-	t.doneFunc = func(ctx context.Context) error {
-		err := deleteLease(ctx)
-		cancel()
-		return err
-	}
+	t.doneFunc = deleteLease
 
 	t.buildLabels()
 
@@ -227,8 +223,8 @@ func (t *createTask) wait(c Containerd) (int, error) {
 	select {
 	case exitStatus := <-t.exitChan:
 		return int(exitStatus.ExitCode()), exitStatus.Error()
-	case <-t.ctx.Done():
-		t.logger.Warn("context cancelled before receiving exit status from container/task")
+	case <-time.After(t.expiration):
+		t.logger.Warn("time expired before receiving exit status from container/task")
 		return -1, context.Canceled
 	}
 }
