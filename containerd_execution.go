@@ -109,14 +109,26 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 	cmd.Stdout = stdout
 	cmd.Stderr = stdErr
 
+	containerId := ""
+	now := time.Now()
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("error creating container: %w", err)
+		return nil, fmt.Errorf("nerdctl: error creating container: %w", err)
+	} else {
+		containerId = strings.TrimSpace(stdout.String())
+		ms := time.Now().Sub(now).Milliseconds()
+		t.logger.WithField("duration", ms).Infof("nerdctl created container '%s' in %d ms", containerId, ms)
 	}
 
-	containerId := strings.TrimSpace(stdout.String())
-	t.logger.Debugf("nerdctl created container %s", containerId)
+	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
 
-	return c.LoadContainer(t.ctx, containerId)
+	now = time.Now()
+	ctr, err := c.LoadContainer(ctx, containerId)
+	dur := time.Now().Sub(now)
+	t.logger.Infof("LoadContainer operation took %d ms", dur.Milliseconds())
+	if err != nil {
+		return nil, fmt.Errorf("error loading container: %w", err)
+	}
+	return ctr, nil
 }
 
 func (t *createTask) buildCreateContainerArgs(c Containerd) []string {
