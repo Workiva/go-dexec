@@ -180,6 +180,9 @@ func abs(v int64) int64 {
 }
 
 func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer) error {
+	if err := t.ensureConnection(c); err != nil {
+		return err
+	}
 	opts := []cio.Opt{cio.WithStreams(stdin, stdout, stderr)}
 	task, err := t.createTask(opts...)
 	if err != nil {
@@ -211,6 +214,17 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	return nil
 }
 
+func (t *createTask) ensureConnection(c Containerd) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if isServing, err := c.IsServing(ctx); !isServing || err != nil {
+		t.logger.Warnf("grpc is not currently serving connection or returned an error while checking. isServing: %t, err: %v", isServing, err)
+		if err = c.Reconnect(); err != nil {
+			return fmt.Errorf("error ensuring grpc connection: %w", err)
+		}
+	}
+	return nil
+}
 func (t *createTask) createTask(opts ...cio.Opt) (containerd.Task, error) {
 	return t.container.NewTask(t.ctx, cio.NewCreator(opts...))
 }
