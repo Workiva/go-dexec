@@ -142,7 +142,9 @@ func (t *createTask) buildCreateContainerArgs(c Containerd) []string {
 	for key, value := range t.labels {
 		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
 	}
+	args = append(args, "--workdir", t.opts.WorkingDir)
 	args = append(args, t.opts.Image)
+	args = append(args, t.cmd...)
 	return args
 }
 
@@ -183,29 +185,19 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	opts := []cio.Opt{cio.WithStreams(stdin, stdout, stderr)}
 	task, err := t.createTask(opts...)
 	if err != nil {
-		return fmt.Errorf("error creating task: %w", err)
+		return fmt.Errorf("error getting task: %w", err)
 	}
 
 	t.task = task
-
-	spec, err := t.createProcessSpec()
-	if err != nil {
-		return fmt.Errorf("error creating process spec: %w", err)
-	}
-	taskId := fmt.Sprintf("%s-task", t.container.ID())
-	ps, err := task.Exec(t.ctx, taskId, spec, cio.NewCreator(opts...))
-	if err != nil {
-		return fmt.Errorf("error creating process: %w", err)
-	}
-	t.process = ps
+	t.process = task
 
 	// wait must always be called before start()
-	t.exitChan, err = ps.Wait(t.ctx)
+	t.exitChan, err = task.Wait(t.ctx)
 	if err != nil {
 		return fmt.Errorf("error waiting for process: %w", err)
 	}
 
-	if err = ps.Start(t.ctx); err != nil {
+	if err = task.Start(t.ctx); err != nil {
 		return fmt.Errorf("error starting process: %w", err)
 	}
 	return nil
