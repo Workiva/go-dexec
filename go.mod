@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/containerd/containerd v1.7.5
 	github.com/fsouza/go-dockerclient v1.9.8
+	github.com/newrelic/go-agent/v3 v3.24.1
 	github.com/opencontainers/runtime-spec v1.1.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.4
@@ -62,7 +63,7 @@ require (
 	golang.org/x/text v0.8.0 // indirect
 	golang.org/x/tools v0.7.0 // indirect
 	google.golang.org/genproto v0.0.0-20230306155012-7f2fa6fef1f4 // indirect
-	google.golang.org/grpc v1.53.0 // indirect
+	google.golang.org/grpc v1.54.0 // indirect
 	google.golang.org/protobuf v1.29.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

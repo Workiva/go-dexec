@@ -1,6 +1,9 @@
 package dexec
 
-import "io"
+import (
+	"github.com/newrelic/go-agent/v3/newrelic"
+	"io"
+)
 
 type ContainerClient interface {
 	Docker | Containerd
@@ -18,4 +21,6 @@ type Execution[T ContainerClient] interface {
 	getID() string
 	kill(d T) error
 	cleanup(d T) error
+
+	setTransaction(*newrelic.Transaction)
 }

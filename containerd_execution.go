@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"io"
@@ -48,19 +49,24 @@ func ByCreatingTask(opts CreateTaskOptions, logger *logrus.Entry) (Execution[Con
 }
 
 type createTask struct {
-	opts       CreateTaskOptions
-	ctx        context.Context
-	doneFunc   func(ctx context.Context) error
-	image      containerd.Image
-	container  containerd.Container
-	task       containerd.Task
-	cmd        []string
-	process    containerd.Process
-	exitChan   <-chan containerd.ExitStatus
-	tmpDir     string
-	logger     *logrus.Entry
-	labels     map[string]string
-	expiration time.Duration
+	opts        CreateTaskOptions
+	ctx         context.Context
+	doneFunc    func(ctx context.Context) error
+	image       containerd.Image
+	container   containerd.Container
+	task        containerd.Task
+	cmd         []string
+	process     containerd.Process
+	exitChan    <-chan containerd.ExitStatus
+	tmpDir      string
+	logger      *logrus.Entry
+	labels      map[string]string
+	expiration  time.Duration
+	transaction *newrelic.Transaction
+}
+
+func (t *createTask) setTransaction(txn *newrelic.Transaction) {
+	t.transaction = txn
 }
 
 func (t *createTask) create(c Containerd, cmd []string) error {
@@ -102,6 +108,7 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 // infrastructure. Once the container is successfully created by nerdctl, we then use the socket to create tasks, run
 // them, and wait for completion
 func (t *createTask) createContainer(c Containerd) (containerd.Container, error) {
+	defer t.transaction.StartSegment("createContainer").End()
 	nerdctlArgs := t.buildCreateContainerArgs(c)
 	cmd := exec.Command(nerdctlBinary, nerdctlArgs...)
 	stdout := &bytes.Buffer{}
@@ -116,15 +123,17 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 	} else {
 		containerId = strings.TrimSpace(stdout.String())
 		ms := time.Now().Sub(now).Milliseconds()
-		t.logger.WithField("duration", ms).Infof("nerdctl created container '%s' in %d ms", containerId, ms)
+		t.logger.WithField("duration", ms).Debugf("nerdctl created container '%s' in %d ms", containerId, ms)
 	}
 
 	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
 
+	lcs := t.transaction.StartSegment("loadContainer")
 	now = time.Now()
 	ctr, err := c.LoadContainer(ctx, containerId)
+	lcs.End()
 	dur := time.Now().Sub(now)
-	t.logger.Infof("LoadContainer operation took %d ms", dur.Milliseconds())
+	t.logger.Debugf("LoadContainer operation took %d ms", dur.Milliseconds())
 	if err != nil {
 		return nil, fmt.Errorf("error loading container: %w", err)
 	}
@@ -132,6 +141,7 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 }
 
 func (t *createTask) buildCreateContainerArgs(c Containerd) []string {
+	defer t.transaction.StartSegment("buildCreateContainerArgs").End()
 	args := []string{"--namespace", c.Client.DefaultNamespace(), "create", "--name", t.generateContainerName(), "--user", t.opts.User}
 	for _, m := range t.opts.Mounts {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", m.Source, m.Destination))
@@ -215,6 +225,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 }
 
 func (t *createTask) ensureConnection(c Containerd) error {
+	defer t.transaction.StartSegment("ensureConnection").End()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if isServing, err := c.IsServing(ctx); !isServing || err != nil {
@@ -226,10 +237,12 @@ func (t *createTask) ensureConnection(c Containerd) error {
 	return nil
 }
 func (t *createTask) createTask(opts ...cio.Opt) (containerd.Task, error) {
+	defer t.transaction.StartSegment("createTask").End()
 	return t.container.NewTask(t.ctx, cio.NewCreator(opts...))
 }
 
 func (t *createTask) createProcessSpec() (*specs.Process, error) {
+	defer t.transaction.StartSegment("createProcessSpec").End()
 	spec, err := t.container.Spec(t.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error getting spec from container: %w", err)

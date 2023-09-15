@@ -3,6 +3,7 @@ package dexec
 import (
 	"bytes"
 	"errors"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"io"
 	"io/ioutil"
 )
@@ -102,10 +103,15 @@ type GenericCmd[T ContainerClient] struct {
 	Method         Execution[T]
 	closeAfterWait []io.Closer
 	client         T
+	NewRelic       *newrelic.Application
 }
 
 // Start starts the specified command but does not wait for it to complete.
 func (g *GenericCmd[T]) Start() error {
+	txn := g.NewRelic.StartTransaction("CommandStart")
+	defer txn.End()
+	g.Method.setTransaction(txn)
+
 	if g.Dir != "" {
 		if err := g.Method.setDir(g.Dir); err != nil {
 			return err
@@ -133,13 +139,23 @@ func (g *GenericCmd[T]) Start() error {
 	}
 
 	cmd := append([]string{g.Path}, g.Args...)
-	if err := g.Method.create(g.client, cmd); err != nil {
+	if err := g.create(txn, cmd); err != nil {
 		return err
 	}
-	if err := g.Method.run(g.client, g.Stdin, g.Stdout, g.Stderr); err != nil {
+	if err := g.run(txn); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (g *GenericCmd[T]) create(txn *newrelic.Transaction, cmd []string) error {
+	defer txn.StartSegment("create").End()
+	return g.Method.create(g.client, cmd)
+}
+
+func (g *GenericCmd[T]) run(txn *newrelic.Transaction) error {
+	defer txn.StartSegment("run").End()
+	return g.Method.run(g.client, g.Stdin, g.Stdout, g.Stderr)
 }
 
 // Wait waits for the command to exit. It must have been started by Start.
@@ -151,6 +167,8 @@ func (g *GenericCmd[T]) Start() error {
 // associated with Cmd (such as file handles).
 func (g *GenericCmd[T]) Wait() error {
 	defer closeFds(g.closeAfterWait)
+	txn := g.NewRelic.StartTransaction("CommandWait")
+	defer txn.End()
 	if !g.started {
 		return errors.New("dexec: not started")
 	}

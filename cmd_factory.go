@@ -14,14 +14,18 @@ func Command(client interface{}, config Config) Cmd {
 	case *docker.Client:
 		dc := Docker{Client: c}
 		execution := getDockerExecution(config)
-		return dc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
+		cmd := dc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
+		cmd.NewRelic = config.NewRelic
+		return cmd
 	case *containerd.Client:
 		if c.DefaultNamespace() == "" {
 			panic(errors.New("containerd client must have default namespace set"))
 		}
 		cdc := Containerd{Client: c}
 		execution := getContainerdExecution(config)
-		return cdc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
+		cmd := cdc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
+		cmd.NewRelic = config.NewRelic
+		return cmd
 	default:
 		panic(fmt.Errorf("unsupported client type: %v", c))
 	}

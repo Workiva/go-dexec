@@ -3,16 +3,18 @@ package dexec
 import (
 	"errors"
 	"fmt"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"io"
 
 	"github.com/fsouza/go-dockerclient"
 )
 
 type createContainer struct {
-	opt docker.CreateContainerOptions
-	cmd []string
-	id  string // created container id
-	cw  docker.CloseWaiter
+	opt         docker.CreateContainerOptions
+	cmd         []string
+	id          string // created container id
+	cw          docker.CloseWaiter
+	transaction *newrelic.Transaction
 }
 
 // ByCreatingContainer is the execution strategy where a new container with specified
@@ -61,7 +63,7 @@ func (c *createContainer) create(d Docker, cmd []string) error {
 	c.opt.Config.Cmd = nil        // clear cmd
 	c.opt.Config.Entrypoint = cmd // set new entrypoint
 
-	container, err := d.Client.CreateContainer(c.opt)
+	container, err := c.createContainer(d)
 	if err != nil {
 		return fmt.Errorf("dexec: failed to create container: %w", err)
 	}
@@ -74,10 +76,31 @@ func (c *createContainer) run(d Docker, stdin io.Reader, stdout, stderr io.Write
 	if c.id == "" {
 		return errors.New("dexec: container is not created")
 	}
-	if err := d.Client.StartContainer(c.id, nil); err != nil {
+
+	if err := c.startContainer(d); err != nil {
 		return fmt.Errorf("dexec: failed to start container:  %w", err)
 	}
 
+	cw, err := c.attachToContainerNonBlocking(d, stdin, stdout, stderr)
+	if err != nil {
+		return fmt.Errorf("dexec: failed to attach container: %w", err)
+	}
+	c.cw = cw
+	return nil
+}
+
+func (c *createContainer) createContainer(d Docker) (*docker.Container, error) {
+	defer c.transaction.StartSegment("createContainer").End()
+	return d.Client.CreateContainer(c.opt)
+}
+
+func (c *createContainer) startContainer(d Docker) error {
+	defer c.transaction.StartSegment("startContainer").End()
+	return d.Client.StartContainer(c.id, nil)
+}
+
+func (c *createContainer) attachToContainerNonBlocking(d Docker, stdin io.Reader, stdout, stderr io.Writer) (docker.CloseWaiter, error) {
+	defer c.transaction.StartSegment("attachToContainerNonBlocking").End()
 	opts := docker.AttachToContainerOptions{
 		Container:    c.id,
 		Stdin:        true,
@@ -89,12 +112,7 @@ func (c *createContainer) run(d Docker, stdin io.Reader, stdout, stderr io.Write
 		Stream:       true,
 		Logs:         true, // include produced output so far
 	}
-	cw, err := d.Client.AttachToContainerNonBlocking(opts)
-	if err != nil {
-		return fmt.Errorf("dexec: failed to attach container: %w", err)
-	}
-	c.cw = cw
-	return nil
+	return d.Client.AttachToContainerNonBlocking(opts)
 }
 
 func (c *createContainer) wait(d Docker) (exitCode int, err error) {
@@ -148,4 +166,8 @@ func (c *createContainer) cleanup(d Docker) error {
 		return fmt.Errorf("error removing container: %w", err)
 	}
 	return nil
+}
+
+func (c *createContainer) setTransaction(txn *newrelic.Transaction) {
+	c.transaction = txn
 }
