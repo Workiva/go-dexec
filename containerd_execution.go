@@ -123,7 +123,7 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 	} else {
 		containerId = strings.TrimSpace(stdout.String())
 		ms := time.Now().Sub(now).Milliseconds()
-		t.logger.WithField("duration", ms).Debugf("nerdctl created container '%s' in %d ms", containerId, ms)
+		t.logger.WithField("duration", ms).Infof("nerdctl created container '%s' in %d ms", containerId, ms)
 	}
 
 	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
