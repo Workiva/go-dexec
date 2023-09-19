@@ -6,6 +6,7 @@ import (
 
 type Containerd struct {
 	*containerd.Client
+	Namespace string
 }
 
 type ContainerdCmd struct {

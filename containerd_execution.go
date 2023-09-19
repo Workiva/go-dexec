@@ -77,7 +77,7 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	// the default containerd settings makes things eligible for garbage collection after 24 hours
 	// since we are spinning up hundreds of thousands of tasks per day, let's set a shorter expiration
 	// so we can try and be good netizens
-	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
+	ctx := namespaces.WithNamespace(context.Background(), c.Namespace)
 	ctx, deleteLease, err := c.WithLease(ctx, leases.WithExpiration(expiration), leases.WithRandomID())
 	if err != nil {
 		return fmt.Errorf("error creating containerd context: %w", err)
@@ -119,7 +119,7 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 		return nil, fmt.Errorf("nerdctl: error creating container: %w", err)
 	}
 
-	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
+	ctx := namespaces.WithNamespace(context.Background(), c.Namespace)
 
 	return t.loadContainer(ctx, c, containerId)
 }
@@ -157,7 +157,7 @@ func (t *createTask) loadContainer(ctx context.Context, c Containerd, containerI
 }
 func (t *createTask) buildCreateContainerArgs(c Containerd) []string {
 	defer t.transaction.StartSegment("buildCreateContainerArgs").End()
-	args := []string{"--namespace", c.Client.DefaultNamespace(), "create", "--name", t.generateContainerName(), "--user", t.opts.User}
+	args := []string{"--namespace", c.Namespace, "create", "--name", t.generateContainerName(), "--user", t.opts.User}
 	for _, m := range t.opts.Mounts {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", m.Source, m.Destination))
 	}

@@ -1,9 +1,5 @@
 package dexec
 
-import (
-	"github.com/containerd/containerd"
-)
-
 type Stats struct {
 	Running          int
 	Created          int
@@ -17,7 +13,7 @@ type Stats struct {
 
 func GetStats(client interface{}) (Stats, error) {
 	switch c := client.(type) {
-	case *containerd.Client:
+	case Containerd:
 		return getContainerdStats(c)
 	default:
 		return Stats{}, nil

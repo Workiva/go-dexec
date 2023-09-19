@@ -13,6 +13,7 @@ type Config struct {
 	CommandDetails  CommandDetails
 	Logger          *logrus.Entry
 	NewRelic        *newrelic.Application
+	Namespace       string
 }
 
 type Mount struct {

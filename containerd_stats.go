@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-func getContainerdStats(c *containerd.Client) (Stats, error) {
-	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
+func getContainerdStats(c Containerd) (Stats, error) {
+	ctx := namespaces.WithNamespace(context.Background(), c.Namespace)
 
 	filters := fmt.Sprintf(`labels."%s"==%s`, ownerLabel, chains)
 	containers, err := c.Containers(ctx, filters)

@@ -18,10 +18,10 @@ func Command(client interface{}, config Config) Cmd {
 		cmd.NewRelic = config.NewRelic
 		return cmd
 	case *containerd.Client:
-		if c.DefaultNamespace() == "" {
-			panic(errors.New("containerd client must have default namespace set"))
+		if config.Namespace == "" {
+			panic(errors.New("config must must have namespace set"))
 		}
-		cdc := Containerd{Client: c}
+		cdc := Containerd{Client: c, Namespace: config.Namespace}
 		execution := getContainerdExecution(config)
 		cmd := cdc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
 		cmd.NewRelic = config.NewRelic
