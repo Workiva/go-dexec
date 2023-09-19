@@ -109,37 +109,52 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 // them, and wait for completion
 func (t *createTask) createContainer(c Containerd) (containerd.Container, error) {
 	defer t.transaction.StartSegment("createContainer").End()
+	defer func(start time.Time) {
+		dur := time.Now().Sub(start).Milliseconds()
+		t.logger.WithField("duration", dur).Infof("dexec: entire create container operation took: %d ms", dur)
+	}(time.Now())
 	nerdctlArgs := t.buildCreateContainerArgs(c)
-	cmd := exec.Command(nerdctlBinary, nerdctlArgs...)
-	stdout := &bytes.Buffer{}
-	stdErr := &bytes.Buffer{}
-	cmd.Stdout = stdout
-	cmd.Stderr = stdErr
-
-	containerId := ""
-	now := time.Now()
-	if err := cmd.Run(); err != nil {
+	containerId, err := t.executeCreateContainer(nerdctlArgs...)
+	if err != nil {
 		return nil, fmt.Errorf("nerdctl: error creating container: %w", err)
-	} else {
-		containerId = strings.TrimSpace(stdout.String())
-		ms := time.Now().Sub(now).Milliseconds()
-		t.logger.WithField("duration", ms).Infof("nerdctl created container '%s' in %d ms", containerId, ms)
 	}
 
 	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
 
-	lcs := t.transaction.StartSegment("loadContainer")
-	now = time.Now()
-	ctr, err := c.LoadContainer(ctx, containerId)
-	lcs.End()
-	dur := time.Now().Sub(now)
-	t.logger.Debugf("LoadContainer operation took %d ms", dur.Milliseconds())
-	if err != nil {
-		return nil, fmt.Errorf("error loading container: %w", err)
-	}
-	return ctr, nil
+	return t.loadContainer(ctx, c, containerId)
 }
 
+func (t *createTask) executeCreateContainer(args ...string) (containerId string, err error) {
+	defer t.transaction.StartSegment("executeCreateContainer").End()
+	defer func(start time.Time) {
+		if err == nil {
+			dur := time.Now().Sub(start).Milliseconds()
+			t.logger.WithField("duration", dur).Infof("nerdctl created container '%s' in %d ms", containerId, dur)
+		}
+	}(time.Now())
+	cmd := exec.Command(nerdctlBinary, args...)
+	stdout := &bytes.Buffer{}
+	stdErr := &bytes.Buffer{}
+	cmd.Stdout = stdout
+	cmd.Stderr = stdErr
+	if err = cmd.Run(); err != nil {
+		return "", err
+	}
+	containerId = strings.TrimSpace(stdout.String())
+	return containerId, nil
+}
+
+func (t *createTask) loadContainer(ctx context.Context, c Containerd, containerId string) (container containerd.Container, err error) {
+	defer t.transaction.StartSegment("loadContainer").End()
+	defer func(start time.Time) {
+		if err == nil {
+			dur := time.Now().Sub(start).Milliseconds()
+			t.logger.Debugf("LoadContainer operation took %d ms", dur)
+		}
+	}(time.Now())
+	container, err = c.LoadContainer(ctx, containerId)
+	return container, err
+}
 func (t *createTask) buildCreateContainerArgs(c Containerd) []string {
 	defer t.transaction.StartSegment("buildCreateContainerArgs").End()
 	args := []string{"--namespace", c.Client.DefaultNamespace(), "create", "--name", t.generateContainerName(), "--user", t.opts.User}
