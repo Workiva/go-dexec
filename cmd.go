@@ -115,8 +115,9 @@ func (g *GenericCmd[T]) Start() error {
 
 	defer func(start time.Time) {
 		dur := time.Now().Sub(start).Milliseconds()
-		logrus.WithField("duration", dur).Infof("dexec: entire start command took %d ms", dur)
+		logrus.WithField("duration", dur).Debugf("dexec: entire start command took %d ms", dur)
 	}(time.Now())
+
 	g.Method.setTransaction(txn)
 
 	if g.Dir != "" {

@@ -111,7 +111,7 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 	defer t.transaction.StartSegment("createContainer").End()
 	defer func(start time.Time) {
 		dur := time.Now().Sub(start).Milliseconds()
-		t.logger.WithField("duration", dur).Infof("dexec: entire create container operation took: %d ms", dur)
+		t.logger.WithField("duration", dur).Debugf("dexec: entire create container operation took: %d ms", dur)
 	}(time.Now())
 	nerdctlArgs := t.buildCreateContainerArgs(c)
 	containerId, err := t.executeCreateContainer(nerdctlArgs...)
@@ -129,7 +129,7 @@ func (t *createTask) executeCreateContainer(args ...string) (containerId string,
 	defer func(start time.Time) {
 		if err == nil {
 			dur := time.Now().Sub(start).Milliseconds()
-			t.logger.WithField("duration", dur).Infof("nerdctl created container '%s' in %d ms", containerId, dur)
+			t.logger.WithField("duration", dur).Debugf("nerdctl created container '%s' in %d ms", containerId, dur)
 		}
 	}(time.Now())
 	cmd := exec.Command(nerdctlBinary, args...)
