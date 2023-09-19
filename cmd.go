@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"github.com/newrelic/go-agent/v3/newrelic"
+	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
+	"time"
 )
 
 type Cmd interface {
@@ -110,6 +112,11 @@ type GenericCmd[T ContainerClient] struct {
 func (g *GenericCmd[T]) Start() error {
 	txn := g.NewRelic.StartTransaction("CommandStart")
 	defer txn.End()
+
+	defer func(start time.Time) {
+		dur := time.Now().Sub(start).Milliseconds()
+		logrus.WithField("duration", dur).Infof("dexec: entire start command took %d ms", dur)
+	}(time.Now())
 	g.Method.setTransaction(txn)
 
 	if g.Dir != "" {
