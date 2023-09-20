@@ -6,6 +6,9 @@ import (
 	"github.com/containerd/containerd/leases"
 )
 
+// ContainerdClient is the interface spec of all the calls we use
+// from *containerd.Client . Having the interface makes it easier to mock the
+// client in tests
 type ContainerdClient interface {
 	WithLease(context.Context, ...leases.Opt) (context.Context, func(ctx context.Context) error, error)
 	IsServing(context.Context) (bool, error)

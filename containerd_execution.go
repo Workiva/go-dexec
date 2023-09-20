@@ -205,6 +205,10 @@ func abs(v int64) int64 {
 }
 
 func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer) error {
+	// gRPC only sends keepalive pings while gRPC calls are active. Since we use nerdctl
+	// to start the container, there may be several seconds (when the system is under heavy load)
+	// at which calls aren't happening and we aren't sending pings. We can use this check to
+	// make sure our connection is still alive and if not, attempt to reconnect it
 	if err := t.ensureConnection(c); err != nil {
 		return err
 	}
@@ -239,6 +243,9 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	return nil
 }
 
+// ensureConnection makes sure the connection is still alive for gRPC calls. If we get
+// an error or false back from the client on IsServing, we attempt to reconnect. If
+// we cannot reconnect, we return the error received from the reconnect attempt
 func (t *createTask) ensureConnection(c Containerd) error {
 	defer t.transaction.StartSegment("ensureConnection").End()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
