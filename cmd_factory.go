@@ -21,7 +21,7 @@ func Command(client interface{}, config Config) Cmd {
 		if config.Namespace == "" {
 			panic(errors.New("config must must have namespace set"))
 		}
-		cdc := Containerd{Client: c, Namespace: config.Namespace}
+		cdc := Containerd{ContainerdClient: c, Namespace: config.Namespace}
 		execution := getContainerdExecution(config)
 		cmd := cdc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
 		cmd.NewRelic = config.NewRelic

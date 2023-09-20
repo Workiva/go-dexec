@@ -9,6 +9,20 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+type client struct {
+	mock.Mock
+	ContainerdClient
+}
+
+func (c *client) IsServing(ctx context.Context) (bool, error) {
+	args := c.Called(ctx)
+	err := args.Error(1)
+	if s, ok := args.Get(0).(bool); ok {
+		return s, err
+	}
+	return false, err
+}
+
 type container struct {
 	mock.Mock
 	containerd.Container

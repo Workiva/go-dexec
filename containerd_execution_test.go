@@ -34,7 +34,9 @@ func Test_createTask_run(t *testing.T) {
 	ct := &createTask{
 		container: mockContainer,
 	}
-	_ = ct.run(Containerd{}, nil, io.Discard, io.Discard)
+	client := new(client)
+	client.On("IsServing", mock.Anything).Return(true, nil)
+	_ = ct.run(Containerd{ContainerdClient: client}, nil, io.Discard, io.Discard)
 
 	mockContainer.AssertExpectations(t)
 	mockTask.AssertExpectations(t)
