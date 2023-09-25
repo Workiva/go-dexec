@@ -14,6 +14,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"io"
+	"math"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -176,8 +177,8 @@ func (t *createTask) generateContainerName() string {
 	// sure we can always create the container
 	suffix := RandomString(randomSuffixLength)
 	details := t.opts.CommandDetails
-
-	return fmt.Sprintf("chains-%d-%d-%d-%s", details.ChainExecutorId, details.ExecutorId, details.ResultId, suffix)
+	// IDs can't have two hyphens in a row, so we use abs to generate a compliant id for the health check containers
+	return fmt.Sprintf("chains-%d-%d-%d-%s", abs(details.ChainExecutorId), abs(details.ExecutorId), abs(details.ResultId), suffix)
 }
 
 func (t *createTask) buildLabels() {
@@ -193,6 +194,14 @@ func (t *createTask) buildLabels() {
 	}
 
 	t.labels = labels
+}
+
+func abs(v int64) int64 {
+	if v >= 0 {
+		return v
+	}
+	f := math.Abs(float64(v))
+	return int64(f)
 }
 
 func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer) error {
