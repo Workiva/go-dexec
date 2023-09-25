@@ -177,7 +177,7 @@ func (t *createTask) generateContainerName() string {
 	// sure we can always create the container
 	suffix := RandomString(randomSuffixLength)
 	details := t.opts.CommandDetails
-	// IDs can't have two hyphens in a row, so we use abs to generate a compliant id for the health check containers
+	// IDs/names can't have two hyphens in a row, so we use abs to generate a compliant id for the health check containers
 	return fmt.Sprintf("chains-%d-%d-%d-%s", abs(details.ChainExecutorId), abs(details.ExecutorId), abs(details.ResultId), suffix)
 }
 
