@@ -14,14 +14,18 @@ func Command(client interface{}, config Config) Cmd {
 	case *docker.Client:
 		dc := Docker{Client: c}
 		execution := getDockerExecution(config)
-		return dc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
+		cmd := dc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
+		cmd.NewRelic = config.NewRelic
+		return cmd
 	case *containerd.Client:
-		if c.DefaultNamespace() == "" {
-			panic(errors.New("containerd client must have default namespace set"))
+		if config.Namespace == "" {
+			panic(errors.New("config must must have namespace set"))
 		}
-		cdc := Containerd{Client: c}
+		cdc := Containerd{ContainerdClient: c, Namespace: config.Namespace}
 		execution := getContainerdExecution(config)
-		return cdc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
+		cmd := cdc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
+		cmd.NewRelic = config.NewRelic
+		return cmd
 	default:
 		panic(fmt.Errorf("unsupported client type: %v", c))
 	}
@@ -56,7 +60,7 @@ func getContainerdExecution(config Config) Execution[Containerd] {
 		CommandTimeout: config.TaskConfig.Timeout,
 		WorkingDir:     config.TaskConfig.WorkingDir,
 		CommandDetails: config.CommandDetails,
-	})
+	}, config.Logger)
 	return exec
 }
 
@@ -71,7 +75,6 @@ func convertMounts[T mountable](ms []Mount) []T {
 	}
 	return mounts
 }
-
 func convertMount[T mountable](m Mount) T {
 	var res T
 	switch v := any(&res).(type) {

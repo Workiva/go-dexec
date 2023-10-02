@@ -1,12 +1,19 @@
 package dexec
 
-import "time"
+import (
+	"github.com/newrelic/go-agent/v3/newrelic"
+	"github.com/sirupsen/logrus"
+	"time"
+)
 
 type Config struct {
 	ContainerConfig ContainerConfig
 	NetworkConfig   NetworkConfig
 	TaskConfig      TaskConfig
 	CommandDetails  CommandDetails
+	Logger          *logrus.Entry
+	NewRelic        *newrelic.Application
+	Namespace       string
 }
 
 type Mount struct {

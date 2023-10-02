@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/oci"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -15,96 +14,12 @@ import (
 	"testing"
 )
 
-type container struct {
-	mock.Mock
-	containerd.Container
-}
-
-func (c *container) Task(ctx context.Context, attach cio.Attach) (containerd.Task, error) {
-	args := c.Called(ctx, attach)
-	err := args.Error(1)
-	if taskIfc, ok := args.Get(0).(containerd.Task); ok {
-		return taskIfc, err
-	}
-	return nil, err
-}
-
-func (c *container) Spec(ctx context.Context) (*oci.Spec, error) {
-	args := c.Called(ctx)
-	err := args.Error(1)
-	if spec, ok := args.Get(0).(*oci.Spec); ok {
-		return spec, err
-	}
-	return nil, err
-}
-
-func (c *container) Delete(ctx context.Context, opts ...containerd.DeleteOpts) error {
-	inputArgs := make([]interface{}, 0, 1+len(opts))
-	inputArgs = append(inputArgs, ctx)
-	for _, opt := range opts {
-		inputArgs = append(inputArgs, opt)
-	}
-	args := c.Called(inputArgs)
-	return args.Error(0)
-}
-
-func (c *container) ID() string {
-	return c.Called().String(0)
-}
-
-type task struct {
-	mock.Mock
-	containerd.Task
-}
-
-func (t *task) Exec(ctx context.Context, id string, spec *specs.Process, creator cio.Creator) (containerd.Process, error) {
-	args := t.Called(ctx, id, spec, creator)
-	err := args.Error(1)
-	if ps, ok := args.Get(0).(containerd.Process); ok {
-		return ps, err
-	}
-	return nil, err
-}
-
-func (t *task) Delete(ctx context.Context, opts ...containerd.ProcessDeleteOpts) (*containerd.ExitStatus, error) {
-	inputArgs := make([]interface{}, 0, 1+len(opts))
-	inputArgs = append(inputArgs, ctx)
-	for _, o := range opts {
-		inputArgs = append(inputArgs, o)
-	}
-	args := t.Called(inputArgs...)
-	err := args.Error(1)
-	if es, ok := args.Get(0).(*containerd.ExitStatus); ok {
-		return es, err
-	}
-	return nil, err
-}
-
-type process struct {
-	mock.Mock
-	containerd.Process
-}
-
-func (p *process) Wait(ctx context.Context) (<-chan containerd.ExitStatus, error) {
-	args := p.Called(ctx)
-	err := args.Error(1)
-	if ch, ok := args.Get(0).(<-chan containerd.ExitStatus); ok {
-		return ch, err
-	}
-	return nil, err
-}
-
-func (p *process) Start(ctx context.Context) error {
-	args := p.Called(ctx)
-	return args.Error(0)
-}
-
 func Test_createTask_run(t *testing.T) {
 	mockContainer := new(container)
 	mockTask := new(task)
 	spec := &oci.Spec{Process: &specs.Process{}}
 	mockContainer.
-		On("Task", mock.Anything, mock.Anything).Return(mockTask, nil).
+		On("NewTask", mock.Anything, mock.Anything).Return(mockTask, nil).
 		On("ID").Return("unit-test").
 		On("Spec", mock.Anything).Return(spec, nil)
 
@@ -119,7 +34,9 @@ func Test_createTask_run(t *testing.T) {
 	ct := &createTask{
 		container: mockContainer,
 	}
-	_ = ct.run(Containerd{}, nil, io.Discard, io.Discard)
+	client := new(client)
+	client.On("IsServing", mock.Anything).Return(true, nil)
+	_ = ct.run(Containerd{ContainerdClient: client}, nil, io.Discard, io.Discard)
 
 	mockContainer.AssertExpectations(t)
 	mockTask.AssertExpectations(t)
@@ -129,7 +46,7 @@ func Test_createTask_run(t *testing.T) {
 	assert.Equal(t, ch, ct.exitChan)
 }
 
-func Test_createTask_generateContainerId(t *testing.T) {
+func Test_createTask_generateContainerName(t *testing.T) {
 	ct := &createTask{
 		opts: CreateTaskOptions{
 			CommandDetails: CommandDetails{
@@ -140,7 +57,7 @@ func Test_createTask_generateContainerId(t *testing.T) {
 		},
 	}
 	expectedRegex := "chains-1-2-3-[a-zA-Z]{6}"
-	containerId := ct.generateContainerId()
+	containerId := ct.generateContainerName()
 	assert.Regexp(t, regexp.MustCompile(expectedRegex), containerId)
 }
 
