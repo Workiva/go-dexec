@@ -80,9 +80,10 @@ func convertMount[T mountable](m Mount) T {
 	switch v := any(&res).(type) {
 	case *docker.HostMount:
 		*v = docker.HostMount{
-			Type:   m.Type,
-			Source: m.Source,
-			Target: m.Destination,
+			Type:     m.Type,
+			Source:   m.Source,
+			Target:   m.Destination,
+			ReadOnly: isReadOnly(m),
 		}
 	case *specs.Mount:
 		*v = specs.Mount{
@@ -93,4 +94,13 @@ func convertMount[T mountable](m Mount) T {
 		}
 	}
 	return res
+}
+
+func isReadOnly(m Mount) bool {
+	for _, opt := range m.Options {
+		if opt == "ro" {
+			return true
+		}
+	}
+	return false
 }
