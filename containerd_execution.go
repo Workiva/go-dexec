@@ -159,7 +159,12 @@ func (t *createTask) buildCreateContainerArgs(c Containerd) []string {
 	defer t.transaction.StartSegment("buildCreateContainerArgs").End()
 	args := []string{"--namespace", c.Namespace, "create", "--name", t.generateContainerName(), "--user", t.opts.User}
 	for _, m := range t.opts.Mounts {
-		args = append(args, "-v", fmt.Sprintf("%s:%s", m.Source, m.Destination))
+		mountString := fmt.Sprintf("%s:%s", m.Source, m.Destination)
+		if len(m.Options) > 0 {
+			opts := strings.Join(m.Options, ",")
+			mountString = fmt.Sprintf("%s:%s", mountString, opts)
+		}
+		args = append(args, "-v", mountString)
 	}
 	for _, e := range t.opts.Env {
 		args = append(args, "-e", e)
