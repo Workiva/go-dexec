@@ -217,8 +217,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	if err := t.ensureConnection(c); err != nil {
 		return err
 	}
-	opts := []cio.Opt{cio.WithStreams(stdin, stdout, stderr)}
-	task, err := t.createTask(opts...)
+	task, err := t.createTask()
 	if err != nil {
 		return fmt.Errorf("error creating task: %w", err)
 	}
@@ -230,6 +229,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 		return fmt.Errorf("error creating process spec: %w", err)
 	}
 	taskId := fmt.Sprintf("%s-task", t.container.ID())
+	opts := []cio.Opt{cio.WithStreams(stdin, stdout, stderr)}
 	ps, err := task.Exec(t.ctx, taskId, spec, cio.NewCreator(opts...))
 	if err != nil {
 		return fmt.Errorf("error creating process: %w", err)
