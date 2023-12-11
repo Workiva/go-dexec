@@ -120,7 +120,6 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 	}
 
 	ctx := namespaces.WithNamespace(context.Background(), c.Namespace)
-
 	return t.loadContainer(ctx, c, containerId)
 }
 
@@ -152,6 +151,7 @@ func (t *createTask) loadContainer(ctx context.Context, c Containerd, containerI
 			t.logger.Debugf("LoadContainer operation took %d ms", dur)
 		}
 	}(time.Now())
+	ctx = newrelic.NewContext(ctx, t.transaction)
 	container, err = c.LoadContainer(ctx, containerId)
 	return container, err
 }
@@ -217,8 +217,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	if err := t.ensureConnection(c); err != nil {
 		return err
 	}
-	opts := []cio.Opt{cio.WithStreams(stdin, stdout, stderr)}
-	task, err := t.createTask(opts...)
+	task, err := t.createTask()
 	if err != nil {
 		return fmt.Errorf("error creating task: %w", err)
 	}
@@ -230,6 +229,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 		return fmt.Errorf("error creating process spec: %w", err)
 	}
 	taskId := fmt.Sprintf("%s-task", t.container.ID())
+	opts := []cio.Opt{cio.WithStreams(stdin, stdout, stderr)}
 	ps, err := task.Exec(t.ctx, taskId, spec, cio.NewCreator(opts...))
 	if err != nil {
 		return fmt.Errorf("error creating process: %w", err)
@@ -255,6 +255,7 @@ func (t *createTask) ensureConnection(c Containerd) error {
 	defer t.transaction.StartSegment("ensureConnection").End()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	ctx = newrelic.NewContext(ctx, t.transaction)
 	if isServing, err := c.IsServing(ctx); !isServing || err != nil {
 		t.logger.Warnf("grpc is not currently serving connection or returned an error while checking. isServing: %t, err: %v", isServing, err)
 		if err = c.Reconnect(); err != nil {
@@ -265,12 +266,16 @@ func (t *createTask) ensureConnection(c Containerd) error {
 }
 func (t *createTask) createTask(opts ...cio.Opt) (containerd.Task, error) {
 	defer t.transaction.StartSegment("createTask").End()
-	return t.container.NewTask(t.ctx, cio.NewCreator(opts...))
+
+	ctx := newrelic.NewContext(t.ctx, t.transaction)
+
+	return t.container.NewTask(ctx, cio.NewCreator(opts...))
 }
 
 func (t *createTask) createProcessSpec() (*specs.Process, error) {
 	defer t.transaction.StartSegment("createProcessSpec").End()
-	spec, err := t.container.Spec(t.ctx)
+	ctx := newrelic.NewContext(t.ctx, t.transaction)
+	spec, err := t.container.Spec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error getting spec from container: %w", err)
 	}
