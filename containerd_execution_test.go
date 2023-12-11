@@ -33,6 +33,7 @@ func Test_createTask_run(t *testing.T) {
 
 	ct := &createTask{
 		container: mockContainer,
+		ctx:       context.Background(),
 	}
 	client := new(client)
 	client.On("IsServing", mock.Anything).Return(true, nil)
@@ -70,6 +71,7 @@ func Test_createTask_createProcessSpec(t *testing.T) {
 			User:       "61000",
 			WorkingDir: "/go/src",
 		},
+		ctx: context.Background(),
 	}
 
 	spec := &oci.Spec{Process: &specs.Process{}}
