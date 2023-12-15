@@ -7,14 +7,17 @@ import (
 	"fmt"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/oci"
 	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"io"
 	"math"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -60,7 +63,6 @@ type createTask struct {
 	exitChan    <-chan containerd.ExitStatus
 	tmpDir      string
 	logger      *logrus.Entry
-	labels      map[string]string
 	expiration  time.Duration
 	transaction *newrelic.Transaction
 }
@@ -86,16 +88,22 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	t.ctx = ctx
 	t.doneFunc = deleteLease
 
-	t.buildLabels()
+	t.image, err = t.getImage(c)
+	if err != nil {
+		return fmt.Errorf("error getting image: %w", err)
+	}
 
-	container, err := t.createContainer(c)
+	t.container, err = t.createContainer(c)
 
 	if err != nil {
 		return fmt.Errorf("error creating container: %w", err)
 	}
-	t.container = container
 
 	return nil
+}
+
+func (t *createTask) getImage(c Containerd) (containerd.Image, error) {
+	return c.GetImage(t.ctx, t.opts.Image)
 }
 
 // createContainer creates a running container on the containerd host but does not start it. Containerd is different
@@ -113,16 +121,49 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 		dur := time.Now().Sub(start).Milliseconds()
 		t.logger.WithField("duration", dur).Debugf("dexec: entire create container operation took: %d ms", dur)
 	}(time.Now())
-	nerdctlArgs := t.buildCreateContainerArgs(c)
-	containerId, err := t.executeCreateContainer(nerdctlArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("nerdctl: error creating container: %w", err)
-	}
-
-	ctx := namespaces.WithNamespace(context.Background(), c.Namespace)
-	return t.loadContainer(ctx, c, containerId)
+	cid := t.generateContainerName()
+	snapshotName := fmt.Sprintf("%s-snapshot", cid)
+	specOpts := make([]oci.SpecOpts, 0)
+	specOpts = append(specOpts, t.createUserOpts()...)
+	specOpts = append(specOpts, oci.WithImageConfig(t.image), oci.WithEnv(t.opts.Env), oci.WithMounts(t.opts.Mounts))
+	specOpts = append(specOpts, withNerdctlOCIHooks())
+	return c.NewContainer(
+		t.ctx,
+		cid,
+		containerd.WithNewSnapshot(snapshotName, t.image),
+		containerd.WithNewSpec(specOpts...),
+		containerd.WithAdditionalContainerLabels(t.buildLabels()),
+	)
 }
 
+func withNerdctlOCIHooks() func(context.Context, oci.Client, *containers.Container, *oci.Spec) error {
+	return func(ctx context.Context, client oci.Client, container *containers.Container, spec *oci.Spec) error {
+		if spec.Hooks == nil {
+			spec.Hooks = &specs.Hooks{}
+		}
+		crArgs := []string{nerdctlBinary, "internal", "oci-hook", "createRuntime"}
+		spec.Hooks.CreateRuntime = append(spec.Hooks.CreateRuntime, specs.Hook{
+			Path: nerdctlBinary,
+			Args: crArgs,
+			Env:  os.Environ(),
+		})
+
+		psArgs := []string{nerdctlBinary, "internal", "oci-hook", "postStop"}
+		spec.Hooks.Poststop = append(spec.Hooks.Poststop, specs.Hook{
+			Path: nerdctlBinary,
+			Args: psArgs,
+			Env:  os.Environ(),
+		})
+		return nil
+	}
+}
+
+func (t *createTask) createUserOpts() []oci.SpecOpts {
+	if t.opts.User == "" {
+		return []oci.SpecOpts{}
+	}
+	return []oci.SpecOpts{oci.WithUser(t.opts.User), oci.WithAdditionalGIDs(t.opts.User)}
+}
 func (t *createTask) executeCreateContainer(args ...string) (containerId string, err error) {
 	defer t.transaction.StartSegment("executeCreateContainer").End()
 	defer func(start time.Time) {
@@ -169,9 +210,9 @@ func (t *createTask) buildCreateContainerArgs(c Containerd) []string {
 	for _, e := range t.opts.Env {
 		args = append(args, "-e", e)
 	}
-	for key, value := range t.labels {
+	/*for key, value := range t.labels {
 		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
-	}
+	}*/
 	args = append(args, t.opts.Image)
 	return args
 }
@@ -186,7 +227,7 @@ func (t *createTask) generateContainerName() string {
 	return fmt.Sprintf("chains-%d-%d-%d-%s", abs(details.ChainExecutorId), abs(details.ExecutorId), abs(details.ResultId), suffix)
 }
 
-func (t *createTask) buildLabels() {
+func (t *createTask) buildLabels() map[string]string {
 	labels := make(map[string]string)
 
 	labels[ownerLabel] = chains
@@ -197,8 +238,7 @@ func (t *createTask) buildLabels() {
 	if deadline, ok := t.ctx.Deadline(); ok {
 		labels[deadlineLabel] = deadline.Format(time.RFC3339)
 	}
-
-	t.labels = labels
+	return labels
 }
 
 func abs(v int64) int64 {
@@ -210,13 +250,6 @@ func abs(v int64) int64 {
 }
 
 func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer) error {
-	// gRPC only sends keepalive pings while gRPC calls are active. Since we use nerdctl
-	// to start the container, there may be several seconds (when the system is under heavy load)
-	// at which calls aren't happening and we aren't sending pings. We can use this check to
-	// make sure our connection is still alive and if not, attempt to reconnect it
-	if err := t.ensureConnection(c); err != nil {
-		return err
-	}
 	task, err := t.createTask()
 	if err != nil {
 		return fmt.Errorf("error creating task: %w", err)

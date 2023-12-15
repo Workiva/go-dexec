@@ -10,6 +10,8 @@ import (
 // from *containerd.Client . Having the interface makes it easier to mock the
 // client in tests
 type ContainerdClient interface {
+	NewContainer(context.Context, string, ...containerd.NewContainerOpts) (containerd.Container, error)
+	GetImage(context.Context, string) (containerd.Image, error)
 	WithLease(context.Context, ...leases.Opt) (context.Context, func(ctx context.Context) error, error)
 	IsServing(context.Context) (bool, error)
 	LoadContainer(context.Context, string) (containerd.Container, error)
