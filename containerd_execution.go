@@ -137,7 +137,7 @@ func (t *createTask) executeCreateContainer(args ...string) (containerId string,
 	cmd.Stdout = stdout
 	cmd.Stderr = stdErr
 	if err = cmd.Run(); err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %s", err, stdErr.String())
 	}
 	containerId = strings.TrimSpace(stdout.String())
 	return containerId, nil
