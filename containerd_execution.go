@@ -55,7 +55,6 @@ type createTask struct {
 	cmd         []string
 	process     containerd.Process
 	exitChan    <-chan containerd.ExitStatus
-	tmpDir      string
 	logger      *logrus.Entry
 	labels      map[string]string
 	deadline    time.Time
