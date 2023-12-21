@@ -75,12 +75,12 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 
 	t.buildLabels()
 
-	container, err := t.createContainer(c)
+	var err error
+	t.container, err = t.createContainer(c)
 
 	if err != nil {
 		return fmt.Errorf("error creating container: %w", err)
 	}
-	t.container = container
 
 	return nil
 }
