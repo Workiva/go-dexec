@@ -137,7 +137,7 @@ func (t *createTask) loadContainer(c Containerd, containerId string) (container 
 			t.logger.Debugf("LoadContainer operation took %d ms", dur)
 		}
 	}(time.Now())
-	ctx := newrelic.NewContext(t.newContext(), t.transaction)
+	ctx := t.newNewrelicContext()
 	container, err = c.LoadContainer(ctx, containerId)
 	return container, err
 }
