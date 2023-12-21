@@ -1,7 +1,6 @@
 package dexec
 
 import (
-	"context"
 	"errors"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/errdefs"
@@ -33,7 +32,6 @@ func Test_createTask_run(t *testing.T) {
 
 	ct := &createTask{
 		container: mockContainer,
-		ctx:       context.Background(),
 	}
 	client := new(client)
 	client.On("IsServing", mock.Anything).Return(true, nil)
@@ -71,7 +69,6 @@ func Test_createTask_createProcessSpec(t *testing.T) {
 			User:       "61000",
 			WorkingDir: "/go/src",
 		},
-		ctx: context.Background(),
 	}
 
 	spec := &oci.Spec{Process: &specs.Process{}}
@@ -89,8 +86,7 @@ func Test_createTask_createProcessSpec(t *testing.T) {
 func Test_createTask_cleanup_NotFoundErrIgnoredOnTaskDelete(t *testing.T) {
 	mockContainer := new(container)
 	mockTask := new(task)
-	ctx := context.Background()
-	ct := &createTask{container: mockContainer, task: mockTask, ctx: ctx}
+	ct := &createTask{container: mockContainer, task: mockTask}
 
 	mockTask.
 		On("Delete", mock.Anything, mock.Anything).
@@ -109,8 +105,7 @@ func Test_createTask_cleanup_NotFoundErrIgnoredOnTaskDelete(t *testing.T) {
 func Test_createTask_cleanup_ErrNotIgnored(t *testing.T) {
 	mockContainer := new(container)
 	mockTask := new(task)
-	ctx := context.Background()
-	ct := &createTask{container: mockContainer, task: mockTask, ctx: ctx}
+	ct := &createTask{container: mockContainer, task: mockTask}
 	expectedErr := errors.New("unit test")
 	mockTask.
 		On("Delete", mock.Anything, mock.Anything).
